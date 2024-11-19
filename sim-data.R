@@ -350,7 +350,7 @@ data <- data %>%
 # Generate distance to hospital
 data <- data %>%
 mutate(
-  # Base random distance with regional adjustments
+  # Base random distance with regional adfjustments
   baseDistance = rnorm(n, mean = 8, sd = 5), # Mean ~8 miles, wide variation
   
   regionAdjustment = case_when(

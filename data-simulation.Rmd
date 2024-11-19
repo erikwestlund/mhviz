@@ -1,0 +1,163 @@
+---
+title: "Data Simulation"
+author: "Erik Westlund"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyr)
+library(janitor)
+library(readr)
+
+n <- 50000
+n_providers = 50000/30
+
+source("utils.R")
+
+```
+
+# Data Simulation
+
+To simulate data, we implement our causal model. We will start by simulating data for root nodes or exogenous nodes (i.e., those without arrows going into them).
+
+## Exogenous Nodes
+
+The following variables have no prior causes in our model:
+
+* `ST`: State
+* `RE`: Race/ethnicity
+* `AGE`: Age of the patient.
+* `PCE`: Parent community engagement
+* `PED`: Parent education
+* `PI`: Parent intelligence
+* `PM`: Parent motivation
+* `PSR`: Parent self-reliance
+
+
+We will generate `n` observations for each of these variables.
+
+```{r data_exog}
+
+# define factor catgegories
+re_cats <- c("white", "hispanic", "black", "asian", "aian", "nhpi", "other")
+ed_cats <- c("less_than_hs", "hs", "some_college", "college", "post_grad")
+rel_cats <- c("christian", "muslim", "jewish", "buddhist", "hindu", "other")
+job_type_cats = c("unemployed", "unskilled", "trade", "professional")
+
+## Population Data from US Census 2020. Combined with health scores from Commonwealth Fund
+## Health Scorecard data.  The weights measure is based upon population data from the Census.
+## `state_pec` is a z-score of the rank of the state in terms of population and used as a 
+## measure of state political & economic conditions with respect to health.
+## This data is for illustration purposes only.
+state_population_data <- read.csv("data/states_census2020_ranks.csv") |> 
+  mutate(state_weight = population/sum(population)) |> 
+   mutate(
+    inverted_rank = max(rank) + 1 - rank,  # Invert ranks (lower is better)
+    state_pec = scale(inverted_rank, center = TRUE, scale = TRUE)[, 1]  # Z-score (normal distribution)
+  ) |> 
+  select(-inverted_rank) 
+
+# Load in data on race/ethnicity population from states. This is from the Census2020 file.
+# It uses their one-race only and separates  Hispanic from non-Hispanic. The weights
+# are just the proportion of the population of one category vs the sum of the population in
+# all race/ethnicity categories. 
+# This data is meant for illustration purposes only.
+state_data <- readr::read_csv("data/race_by_state_census2020.csv") |> 
+  pivot_longer(cols = -"Label",
+               names_to = "State",
+               values_to = "Population") %>%
+  pivot_wider(names_from = "Label", values_from = Population) %>%
+  mutate(across(-State, ~ as.numeric(gsub(",", "", .)))) |>
+  rename(
+    state = State,
+    white = White,
+    black = Black,
+    hispanic = "Hispanic or Latino",
+    asian = Asian,
+    aian = "American Indian and Alaska Native",
+    nhpi = "Native Hawaiian and Other Pacific Islander",
+    other = Other,
+  ) |> mutate(
+    sum = white + hispanic + black + asian + aian + other + nhpi,
+    white = white / sum,
+    black = black / sum,
+    hispanic = hispanic / sum,
+    asian = asian / sum,
+    aian = aian / sum,
+    other = other / sum,
+    nhpi = nhpi / sum,
+  ) |>
+  rename(state_name = state) |>
+  select(-sum) |>
+  left_join(state_population_data |> select(state_name, state, state_weight, state_pec)) |>
+  filter(!is.na(state))
+
+# Start by creating a dataframe with patients having state IDs proportional to
+# the population of each state. Then row-wise generate race/ethnicity categories.
+data <- data.frame(state = sample(
+  state_data$state,
+  n,
+  replace = TRUE,
+  prob = state_data$state_weight
+)) |>
+  merge(state_data |> select(state, state_pec, re_cats), by = "state") |>
+  rowwise() %>%
+  mutate(race = sample(re_cats, size = 1, prob = c_across(all_of(re_cats)))) %>%
+  ungroup() |>
+  select(-re_cats)
+
+## Next generate all the other exogenous variables
+# We need to assign a provider to each patient. This provider needs a quality
+data <- data |>
+  mutate(
+    age = generate_mother_ages(n),
+    parent_income = generate_incomes(
+      n,
+      median_income = 60000,
+      sd = 25000,
+      min_income = 0,
+      max_income = 1000000
+    ),
+    parent_intelligence = rnorm(n, 1, 1),
+    parent_self_reliance = rnorm(n, 1, 1),
+    parent_motivation = rnorm(n, 1, 1),
+    parent_community_engagement = rnorm(n, 0, 1),
+    parent_edu = generate_education(n, ed_cats, parent_intelligence, parent_self_reliance, parent_motivation, parent_community_engagement, parent_income),
+  )
+
+# Now, let's work our way up from the root nodes
+data <- data |> mutate(
+  # things determined by parents
+  intelligence = gen_correlated(parent_intelligence, target_r = 0.5),
+  self_reliance = gen_correlated(parent_self_reliance, target_r = 0.5),
+  motivation = gen_correlated(parent_motivation, target_r = 0.5),
+  community_engagement = gen_correlated(parent_community_engagement, target_r = 0.5),
+  edu = generate_education(n, ed_cats, intelligence, self_reliance, motivation, community_engagement, parent_income, parent_edu),
+  religion = generate_religion(n, rel_cats, race),
+  cultural_orientation = generate_cultural_orientation(n, parent_income, parent_edu, state_pec, religion, community_engagement),
+  job_type = generate_job_type(n, job_type_cats, ed_cats, edu, parent_income),
+)
+
+data <- data |> mutate(
+  income = generate_income(n, job_type, edu, race, state_pec, age),
+  edu_numeric = match(edu, ed_cats),
+  obesity = simulate_obesity(n, income, edu, state_pec, age, target_prevalence=0.35),
+  multiple_gestation = simulate_multiple_gestation(n, age, obesity, target_prevalence = 0.03),
+  diabetes = simulate_diabetes(n, age, obesity, income, target_prevalence = 0.1),
+  heart_disease = simulate_heart_disease(n, age, obesity, diabetes, target_prevalence = 0.15),
+  placenta_previa = simulate_placenta_previa(n, age, multiple_gestation, target_prevalence = 0.01),
+  hypertension = simulate_hypertension(n, age, obesity, target_prevalence = 0.2),
+  gest_hypertension = simulate_gest_hypertension(n, hypertension, multiple_gestation, target_prevalence = 0.05),
+  preeclampsia = simulate_preeclampsia(n, age, hypertension, gest_hypertension, multiple_gestation, target_prevalence = 0.02),
+  dependents = simulate_dependents(n, income, job_type, age),
+  insurance = simulate_insurance(n, job_type_cats, job_type, state_pec, age),
+  distance_to_provider = simulate_distance(n, state_pec),
+)
+
+```
