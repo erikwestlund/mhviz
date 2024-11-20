@@ -14,35 +14,13 @@ library(dplyr)
 library(tidyr)
 library(janitor)
 library(readr)
+library(forcats)
+library(kableExtra)
 
 n <- 50000
-n_providers = 50000/30
+n_providers = round(50000/100)
 
 source("utils.R")
-
-```
-
-# Data Simulation
-
-To simulate data, we implement our causal model. We will start by simulating data for root nodes or exogenous nodes (i.e., those without arrows going into them).
-
-## Exogenous Nodes
-
-The following variables have no prior causes in our model:
-
-* `ST`: State
-* `RE`: Race/ethnicity
-* `AGE`: Age of the patient.
-* `PCE`: Parent community engagement
-* `PED`: Parent education
-* `PI`: Parent intelligence
-* `PM`: Parent motivation
-* `PSR`: Parent self-reliance
-
-
-We will generate `n` observations for each of these variables.
-
-```{r data_exog}
 
 # define factor catgegories
 re_cats <- c("white", "hispanic", "black", "asian", "aian", "nhpi", "other")
@@ -50,18 +28,31 @@ ed_cats <- c("less_than_hs", "hs", "some_college", "college", "post_grad")
 rel_cats <- c("christian", "muslim", "jewish", "buddhist", "hindu", "other")
 job_type_cats = c("unemployed", "unskilled", "trade", "professional")
 
+```
+
+# Data Simulation
+
+To simulate data, we implement our causal model. We will start by simulating data for root nodes or exogenous nodes (i.e., those without arrows going into them).
+
+## States/Geography
+
+Using data from the Census and the Commonwealth Fund health grades, we'll generate a data frame with some state-level data. This data will be used to generate state-level variables for patients, such as the political/economic conditions related to health. It will also be used to structure the distribution of race/ethnicity in the population per state.
+
+```{r gen_state}
+
 ## Population Data from US Census 2020. Combined with health scores from Commonwealth Fund
 ## Health Scorecard data.  The weights measure is based upon population data from the Census.
-## `state_pec` is a z-score of the rank of the state in terms of population and used as a 
+## `pec` is a z-score of the rank of the state in terms of population and used as a 
 ## measure of state political & economic conditions with respect to health.
 ## This data is for illustration purposes only.
 state_population_data <- read.csv("data/states_census2020_ranks.csv") |> 
   mutate(state_weight = population/sum(population)) |> 
    mutate(
     inverted_rank = max(rank) + 1 - rank,  # Invert ranks (lower is better)
-    state_pec = scale(inverted_rank, center = TRUE, scale = TRUE)[, 1]  # Z-score (normal distribution)
+    pec = scale(inverted_rank, center = TRUE, scale = TRUE)[, 1]  # Z-score (normal distribution)
   ) |> 
   select(-inverted_rank) 
+
 
 # Load in data on race/ethnicity population from states. This is from the Census2020 file.
 # It uses their one-race only and separates  Hispanic from non-Hispanic. The weights
@@ -71,8 +62,8 @@ state_population_data <- read.csv("data/states_census2020_ranks.csv") |>
 state_data <- readr::read_csv("data/race_by_state_census2020.csv") |> 
   pivot_longer(cols = -"Label",
                names_to = "State",
-               values_to = "Population") %>%
-  pivot_wider(names_from = "Label", values_from = Population) %>%
+               values_to = "Population") |>
+  pivot_wider(names_from = "Label", values_from = Population) |>
   mutate(across(-State, ~ as.numeric(gsub(",", "", .)))) |>
   rename(
     state = State,
@@ -95,8 +86,54 @@ state_data <- readr::read_csv("data/race_by_state_census2020.csv") |>
   ) |>
   rename(state_name = state) |>
   select(-sum) |>
-  left_join(state_population_data |> select(state_name, state, state_weight, state_pec)) |>
+  left_join(state_population_data |> select(state_name, state, state_weight, pec)) |>
   filter(!is.na(state))
+
+state_data |> kable()
+
+readr::write_csv(state_data, "data/state_data.csv")
+```
+
+## Providers
+
+We need to generate providers.  We will have a provider for roughly every 100 patients. We will generate a provider quality measure which is mostly random, but determined partially by state political and economic considerations with respect to health.
+
+Providers will vary by state population. We below show a random sample of 50 providers.
+
+```{r gen_providers}
+
+providers <- state_data |>
+  slice(rep(1:n(), each = 1)) |>
+  arrange(state) |>
+  mutate(
+    id = 1:n(),
+  ) |> 
+  select(id, state, pec)
+
+remaining_providers <- n_providers - nrow(providers)
+
+additional_providers <- data.frame(
+  id = (nrow(providers) + 1):n_providers,
+  state = sample(state_data$state, remaining_providers, replace = TRUE, prob = state_data$state_weight)
+) |> 
+  left_join(state_data |> select(state, pec), by = "state")
+
+providers <- bind_rows(providers, additional_providers) |> 
+  mutate(
+    quality = gen_provider_quality(n_providers, pec)
+  ) |> 
+  arrange(id) |> 
+  select(id, state, quality)
+
+providers |> sample_n(50) |>  kable()
+
+```
+
+## Patients
+
+We'll start by generating a date frame with patients. We will generate a state for each patient based on the population of each state. We will randomly assign a race/ethnicity based upon state-level proportions. We will then assign that person to a provider in their state.
+
+```{r gen_ind}
 
 # Start by creating a dataframe with patients having state IDs proportional to
 # the population of each state. Then row-wise generate race/ethnicity categories.
@@ -106,18 +143,60 @@ data <- data.frame(state = sample(
   replace = TRUE,
   prob = state_data$state_weight
 )) |>
-  merge(state_data |> select(state, state_pec, re_cats), by = "state") |>
-  rowwise() %>%
-  mutate(race = sample(re_cats, size = 1, prob = c_across(all_of(re_cats)))) %>%
+  merge(state_data |> select(state, pec, re_cats), by = "state") |>
+  rowwise() |>
+  mutate(race = sample(re_cats, size = 1, prob = c_across(all_of(re_cats)))) |>
   ungroup() |>
-  select(-re_cats)
+  select(-re_cats) |> 
+  mutate(id = row_number())
+
+data |> sample_n(10) |> kable()
+```
+
+## Assign Patient to Provider
+
+```{r patient_to_provider}
+
+data <- data |> 
+  rowwise() |>
+  mutate(provider_id = sample(providers$id[providers$state == state], 1)) |>
+  ungroup()  |> 
+  left_join(providers |> select(id, quality), by = c("provider_id" = "id")) |> 
+  select(id, provider_id, quality, state, pec, race) |> 
+  rename(
+    provider_quality = quality
+  )
+  
+
+data |> sample_n(10) |> kable()
+
+```
+
+
+## Exogenous Nodes
+
+Now every patient has a state, a provider, a race/ethnicity, and some associated data by state.
+
+In addition to race/ethnicity and state, the following variables have no prior causes in our model:
+
+* `AGE`: Age of the patient.
+* `PCE`: Parent community connections
+* `PED`: Parent education
+* `PI`: Parent intelligence
+* `PM`: Parent motivation
+* `PSR`: Parent resilience
+
+
+We will generate `n` observations for each of these variables.
+
+```{r data_exog}
 
 ## Next generate all the other exogenous variables
 # We need to assign a provider to each patient. This provider needs a quality
 data <- data |>
   mutate(
-    age = generate_mother_ages(n),
-    parent_income = generate_incomes(
+    age = gen_mother_ages(n),
+    parent_income = gen_incomes(
       n,
       median_income = 60000,
       sd = 25000,
@@ -125,39 +204,257 @@ data <- data |>
       max_income = 1000000
     ),
     parent_intelligence = rnorm(n, 1, 1),
-    parent_self_reliance = rnorm(n, 1, 1),
+    parent_resilience = rnorm(n, 1, 1),
     parent_motivation = rnorm(n, 1, 1),
-    parent_community_engagement = rnorm(n, 0, 1),
-    parent_edu = generate_education(n, ed_cats, parent_intelligence, parent_self_reliance, parent_motivation, parent_community_engagement, parent_income),
+    parent_community_connections = rnorm(n, 0, 1),
+    parent_edu = gen_education(n, ed_cats, parent_intelligence, parent_resilience, parent_motivation, parent_community_connections, parent_income),
   )
 
-# Now, let's work our way up from the root nodes
+data |> sample_n(10) |> kable()
+
+```
+
+## Working our way up from the root nodes
+
+Religion is patterned by race but has no other determinants.
+
+```{r religion}
 data <- data |> mutate(
-  # things determined by parents
-  intelligence = gen_correlated(parent_intelligence, target_r = 0.5),
-  self_reliance = gen_correlated(parent_self_reliance, target_r = 0.5),
-  motivation = gen_correlated(parent_motivation, target_r = 0.5),
-  community_engagement = gen_correlated(parent_community_engagement, target_r = 0.5),
-  edu = generate_education(n, ed_cats, intelligence, self_reliance, motivation, community_engagement, parent_income, parent_edu),
-  religion = generate_religion(n, rel_cats, race),
-  cultural_orientation = generate_cultural_orientation(n, parent_income, parent_edu, state_pec, religion, community_engagement),
-  job_type = generate_job_type(n, job_type_cats, ed_cats, edu, parent_income),
+  religion = gen_religion(n, rel_cats, race),
 )
 
+data |> select(id, race, religion) |> sample_n(10) |> kable()
+
+```
+
+The following variables are determined by parents' values:
+
+* `I`: Intelligence
+* `SR`: Resilience
+* `M`: Motivation
+* `CE`: Community connections
+
+```{r ind}
 data <- data |> mutate(
-  income = generate_income(n, job_type, edu, race, state_pec, age),
-  edu_numeric = match(edu, ed_cats),
-  obesity = simulate_obesity(n, income, edu, state_pec, age, target_prevalence=0.35),
-  multiple_gestation = simulate_multiple_gestation(n, age, obesity, target_prevalence = 0.03),
-  diabetes = simulate_diabetes(n, age, obesity, income, target_prevalence = 0.1),
-  heart_disease = simulate_heart_disease(n, age, obesity, diabetes, target_prevalence = 0.15),
-  placenta_previa = simulate_placenta_previa(n, age, multiple_gestation, target_prevalence = 0.01),
-  hypertension = simulate_hypertension(n, age, obesity, target_prevalence = 0.2),
-  gest_hypertension = simulate_gest_hypertension(n, hypertension, multiple_gestation, target_prevalence = 0.05),
-  preeclampsia = simulate_preeclampsia(n, age, hypertension, gest_hypertension, multiple_gestation, target_prevalence = 0.02),
-  dependents = simulate_dependents(n, income, job_type, age),
-  insurance = simulate_insurance(n, job_type_cats, job_type, state_pec, age),
-  distance_to_provider = simulate_distance(n, state_pec),
+  intelligence = gen_correlated(parent_intelligence, target_r = 0.5),
+  resilience = gen_correlated(parent_resilience, target_r = 0.5),
+  motivation = gen_correlated(parent_motivation, target_r = 0.5),
+  community_connections = gen_correlated(parent_community_connections, target_r = 0.5),
+)
+
+data |> select(id, parent_intelligence, intelligence, parent_resilience, resilience, parent_motivation, motivation, parent_community_connections, community_connections) |> sample_n(10) |> kable()
+
+```
+
+The following variables are determined by a mixture personality, geography, and parents' values:
+
+* Education (varies by personal traits and parents' class position)
+* Cultural orientation (namely, trust of institutions; varies by parents class position, religion, geography, and commu nity connections)
+* Job type (varies by educational attainment and parental income)
+* Dependents (varies by income, job type, and age)
+* Insurance (varies by job type, state conditions, age)
+* Distance to provider (varies by state conditions)
+
+```{r ind_ses}
+data <- data |> mutate(
+  edu = gen_education(n, ed_cats, intelligence, resilience, motivation, community_connections, parent_income, parent_edu),
+  income = gen_incomes(
+    n,
+    median_income = 60000,
+    sd = 25000,
+    min_income = 0,
+    max_income = 1000000
+  ),
+  cultural_orientation = gen_cultural_orientation(n, parent_income, parent_edu, pec, religion, community_connections),
+  job_type = gen_job_type(n, job_type_cats, ed_cats, edu, parent_income),
+  dependents = gen_dependents(n, income, job_type, age),
+  insurance = gen_insurance(n, job_type_cats, job_type, pec, age),
+  distance_to_provider = gen_distance(n, pec),
+)
+
+data |> select(id, edu, income, cultural_orientation, job_type, dependents, insurance, distance_to_provider) |> sample_n(10) |> kable()
+
+```
+
+Comorbidity is determined by age, SES, and other comorbidities.
+
+* Obesity (varies by state conditions, age)
+* Multiple gestation (varies by age, obesity)
+* Diabetes (varies by age, obesity, income)
+* Heart disease (varies by age, obesity, diabetes)
+* Placenta previa (varies by multiple gestation)
+* Hypertension (varies by age, obesity)
+* Gestational hypertension (varies by hypertension, multiple gestation)
+* Preeclampsia (varies by age, hypertension, gestational hypertension, multiple gestation)
+
+```{r comorboidities}
+data <- data |> mutate(
+  obesity = gen_obesity(n, income, edu, pec, age, target_prevalence=0.35),
+  multiple_gestation = gen_multiple_gestation(n, age, obesity, target_prevalence = 0.03),
+  diabetes = gen_diabetes(n, age, obesity, income, target_prevalence = 0.1),
+  heart_disease = gen_heart_disease(n, age, obesity, diabetes, target_prevalence = 0.15),
+  placenta_previa = gen_placenta_previa(n, age, multiple_gestation, target_prevalence = 0.01),
+  hypertension = gen_hypertension(n, age, obesity, target_prevalence = 0.2),
+  gest_hypertension = gen_gest_hypertension(n, hypertension, multiple_gestation, target_prevalence = 0.05),
+  preeclampsia = gen_preeclampsia(n, age, hypertension, gest_hypertension, multiple_gestation, target_prevalence = 0.02),
+)
+
+data |> select(id, obesity, multiple_gestation, diabetes, heart_disease, placenta_previa, hypertension, gest_hypertension, preeclampsia) |> sample_n(10) |> kable()
+
+```
+
+## Immediate causes of receipt of comprehensive postnatal care
+
+Provider quality is determined by state conditions and already calculated.
+
+Personal capacity (to attend visits) is determined by:
+
+* dependents
+* job type
+* income
+* distance to provider
+
+```{r personal_capacity} 
+
+data <- data |> mutate(
+  personal_capacity = gen_personal_capacity(n, dependents, job_type, income, distance_to_provider)
 )
 
 ```
+
+Now generate the risk profile, which is a function of:
+
+* provider quality (negatively correlated)
+* age
+* obesity
+* multiple gestation
+* diabetes
+* heart disease
+* placenta previa
+* hypertension
+* gestational hypertension
+* preeclampsia
+
+```{r risk_profile}
+data <- data |> mutate(
+  risk_profile = gen_risk_profile(n, provider_quality = providers$quality[match(data$provider_id, providers$id)], 
+                                 age, obesity, multiple_gestation, diabetes, heart_disease, placenta_previa, hypertension, gest_hypertension, preeclampsia)
+)
+
+```
+
+Now generate risk aversion, which we see as a function of the negative conseuqences from getting really sick and how much people want to avoid them.
+
+* insurance (people without insurance will be more risk averse because of cost; positively correlated)
+* provider quality (people with better providers will be less risk averse since they trust the care they can get; negatively correlated)
+* risk profile (people with higher risk will be more risk averse since they will have more consequences if getting ill; positively correlated)
+
+```{r risk_aversion}
+
+data <- data |> mutate(
+  risk_aversion = gen_risk_aversion(n, insurance, provider_quality = providers$quality[match(data$provider_id, providers$id)], risk_profile)
+)
+```
+
+Provider trust is a function of:
+
+* race/ethnicity (racial minorities are less likely to trust providers; negatively correlated)
+* provider quality (people with better providers will be more likely to trust them; positively correlated)
+* cultural orientation (people trusting institutions will be more likely to trust providers; positively correlated)
+
+
+```{r provider_trust}
+
+data <- data |> mutate(
+  provider_trust = gen_provider_trust(n, re_cats, race, provider_quality, cultural_orientation)
+)
+
+```
+And finally, willingness to pay, which we see as a function of:
+
+* provider quality (people with better providers will be willing to pay more; positively correlated)
+* income (people with higher income will be willing to pay more; positively correlated)
+* insurance (people with insurance will be willing to pay more since they don't have to cover it out of pocket; positively correlated)
+* risk aversion (people who are more risk averse will be willing to pay more; positively correlated)
+* cultural orientation (people who trust institutions will be willing to pay more; positively correlated)
+
+```{r willingness_to_pay}
+
+data <- data |> mutate(
+  willingness_to_pay = gen_willingness_to_pay(n, provider_quality = providers$quality[match(data$provider_id, providers$id)], income, insurance, risk_aversion, cultural_orientation)
+)
+```
+
+Finally, we generate the outcome of interest, receipt of comprehensive postnatal care, which is a function of:
+
+* personal capacity (people with more capacity will be more likely to attend visits; positively correlated)
+* willingness to pay (people who are willing to pay more will be more likely to attend visits; positively correlated)
+* provider quality (people with better providers will be more likely to attend visits; positively correlated)
+* provider trust (people who trust their providers will be more likely to attend visits; positively correlated)
+* risk aversion (people who are more risk averse will be more likely to attend visits; negatively correlated)
+* risk profile (people with higher risk will be more likely to attend visits; positively correlated)
+
+```{r gen_dv}
+
+data <- data |> 
+  mutate(
+    received_comprehensive_postnatal_care = gen_received_comprehensive_postnatal_care(n, personal_capacity, willingness_to_pay, provider_quality, provider_trust, risk_aversion, risk_profile)
+  )
+
+```
+
+We're going to include an income variable, but it's going to be censored and have measurement error.
+
+
+```{r income_osberved}
+
+sri_labels <- c("0–$25,000", "$25,000–$50,000", "$50,000–$75,000", "$75,000–$100,000", "$100,000–$125,000", "$125,000–$150,000", "$150,000–$175,000", "$175,000+")
+
+data <- data |> mutate(
+  self_report_income = cut(
+      pmin(pmax(income + rnorm(n, mean = 0, sd = 5000), 0), 200000), # Add noise and cap
+      breaks = seq(0, 200000, by = 25000),
+      include.lowest = TRUE,
+      right = FALSE,
+      labels = sri_labels
+    )
+)
+
+table(data$self_report_income)
+
+analysis_data <- data |> select(
+  id,
+  provider_id,
+  state,
+  received_comprehensive_postnatal_care,
+  self_report_income,
+  age,
+  edu,
+  race,
+  insurance,
+  job_type,
+  dependents,
+  distance_to_provider,
+  obesity,
+  multiple_gestation,
+  diabetes,
+  heart_disease,
+  placenta_previa,
+  hypertension,
+  gest_hypertension,
+  preeclampsia
+) |>
+  mutate(
+    self_report_income = as.character(self_report_income),
+    job_type = as.character(job_type),
+    dependents = as.character(dependents),
+  ) |> 
+  rename(
+    race_ethnicity = race
+  )
+
+readr::write_csv(analysis_data, "data/simulated_data.csv")
+
+```
+
+

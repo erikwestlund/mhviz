@@ -63,7 +63,7 @@ latent_vars_parent <- tibble(
   parentSelfReliance = rnorm(n, mean = 1, sd = 1),
   parentMotivation = rnorm(n, mean = 1, sd = 1),
   parentIntelligence = rnorm(n, mean = 1, sd = 1),
-  parentCommunityEngagement = rnorm(n, mean = 1, sd = 1)
+  parentCommunityConnections = rnorm(n, mean = 1, sd = 1)
 )
 
 # Generate child latent variables correlated with parent at 0.5
@@ -72,7 +72,7 @@ latent_vars_child <- latent_vars_parent %>%
     childSelfReliance = 0.5 * parentSelfReliance + sqrt(1 - 0.5^2) * rnorm(n, mean = 0, sd = 1),
     childMotivation = 0.5 * parentMotivation + sqrt(1 - 0.5^2) * rnorm(n, mean = 0, sd = 1),
     childIntelligence = 0.5 * parentIntelligence + sqrt(1 - 0.5^2) * rnorm(n, mean = 0, sd = 1),
-    childCommunityEngagement = 0.5 * parentCommunityEngagement + sqrt(1 - 0.5^2) * rnorm(n, mean = 0, sd = 1)
+    childCommunityConnections = 0.5 * parentCommunityConnections + sqrt(1 - 0.5^2) * rnorm(n, mean = 0, sd = 1)
   ) %>%
   select(starts_with("child"))
 
@@ -87,7 +87,7 @@ data <- data %>%
     parentIncomeRaw = 0.25 * parentSelfReliance +
       0.25 * parentMotivation +
       0.25 * parentIntelligence +
-      0.25 * parentCommunityEngagement +
+      0.25 * parentCommunityConnections +
       rnorm(n, mean = 0, sd = 1) * sqrt(0.5),
     
     # Apply transformations to make it right-skewed and set median ~60k
@@ -107,7 +107,7 @@ data <- data %>%
       0.3 * childMotivation +
       0.3 * childIntelligence +
       0.2 * childSelfReliance +
-      0.1 * childCommunityEngagement +
+      0.1 * childCommunityConnections +
       rnorm(n, mean = 0, sd = 1) * sqrt(0.5), # Add 50% noise
     
     # Map raw scores to educational attainment levels
@@ -187,7 +187,7 @@ data <- data %>%
     # Income calculation
     incomeRaw = 0.4 * jobIncomeComponent +
       0.4 * educationIncomeComponent +
-      0.1 * (childMotivation + childIntelligence + childSelfReliance + childCommunityEngagement) +
+      0.1 * (childMotivation + childIntelligence + childSelfReliance + childCommunityConnections) +
       rnorm(n, mean = 0, sd = 1) * sqrt(0.1), # 10% random noise
     
     # Transform to make income realistic (median ~60k, right-skewed)

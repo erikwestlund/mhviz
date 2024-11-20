@@ -29,17 +29,23 @@ gen_correlated <- function(x, target_r, noise_sd = 1) {
   target_r * x + sqrt(1 - target_r^2) * scale(noise)[, 1]
 }
 
-generate_cultural_orientation <- function(
+gen_provider_quality <- function(n, pec) {
+  random_quality <- rnorm(n, mean = 1, sd = 1)
+  quality_influenced_by_state <- pec * 0.2
+  random_quality * 0.8 + quality_influenced_by_state
+}
+
+gen_cultural_orientation <- function(
     n, 
     parent_income, 
     parent_edu, 
     state_pec, 
     religion, 
-    community_engagement
+    community_connections
 ) {
   parent_income <- normalize_to_0_1(parent_income)
   state_pec <- normalize_to_0_1(state_pec)
-  community_engagement <- normalize_to_0_1(community_engagement)
+  community_connections <- normalize_to_0_1(community_connections)
   
   parent_edu_weights <- c(
     less_than_hs = 0.2,
@@ -59,7 +65,7 @@ generate_cultural_orientation <- function(
   cultural_orientation <- 0.2 * parent_income +
     0.2 * parent_edu_value +
     0.2 * state_pec +
-    0.2 * community_engagement +
+    0.2 * community_connections +
     0.05 * religion_boost +
     0.35 * random_component
   
@@ -69,13 +75,13 @@ generate_cultural_orientation <- function(
   return(cultural_orientation)
 }
 
-generate_education <- function(
+gen_education <- function(
     n, 
     education_levels, 
     intelligence, 
-    self_reliance, 
+    resilience, 
     motivation, 
-    community_engagement, 
+    community_connections, 
     parent_income = NULL,
     parent_education = NULL
 ) {
@@ -88,9 +94,9 @@ generate_education <- function(
   )
   
   composite_weight <- 0.25 * scale(intelligence)[, 1] +
-    0.15 * scale(self_reliance)[, 1] +
+    0.15 * scale(resilience)[, 1] +
     0.2 * scale(motivation)[, 1] +
-    0.1 * scale(community_engagement)[, 1]
+    0.1 * scale(community_connections)[, 1]
   
   if (!is.null(parent_education)) {
     # Assign weights to each parental education level
@@ -131,7 +137,7 @@ generate_education <- function(
   })
 }
 
-generate_religion <- function(n, rel_cats, race) {
+gen_religion <- function(n, rel_cats, race) {
   race_religion_probs <- list(
     white = c(christian = 0.7, muslim = 0.02, jewish = 0.1, buddhist = 0.03, hindu = 0.01, other = 0.14),
     black = c(christian = 0.8, muslim = 0.05, jewish = 0.01, buddhist = 0.01, hindu = 0.01, other = 0.12),
@@ -156,7 +162,7 @@ generate_religion <- function(n, rel_cats, race) {
   })
 }
 
-generate_incomes <- function(n, median_income = 60000, sd = 25000, min_income = 0, max_income = 1000000) {
+gen_incomes <- function(n, median_income = 60000, sd = 25000, min_income = 0, max_income = 1000000) {
   # Generate log-normal incomes based on median and standard deviation
   incomes <- rlnorm(n, meanlog = log(median_income), sdlog = log(1 + sd / median_income))
   
@@ -166,7 +172,7 @@ generate_incomes <- function(n, median_income = 60000, sd = 25000, min_income = 
   return(round(incomes))  # Return rounded incomes
 }
 
-generate_mother_ages <- function(n) {
+gen_mother_ages <- function(n) {
   # Approximate U.S. mother age distribution (source: CDC, Census)
   mother_age_distribution <- data.frame(
     age_group = c("15-19", "20-24", "25-29", "30-34", "35-39", "40-44"),
@@ -190,7 +196,7 @@ generate_mother_ages <- function(n) {
   return(sampled_ages)
 }
 
-generate_job_type <- function(n, job_type_cats, education_levels, edu, parent_income) {
+gen_job_type <- function(n, job_type_cats, education_levels, edu, parent_income) {
   proportions <- c(0.05, 0.50, 0.20, 0.25)
   if (length(proportions) != length(job_type_cats)) stop("Proportions must match job type categories")
   
@@ -221,7 +227,7 @@ generate_job_type <- function(n, job_type_cats, education_levels, edu, parent_in
   return(job_types)
 }
 
-simulate_condition <- function(n, predictor, target_prevalence, correlation_weight) {
+gen_condition <- function(n, predictor, target_prevalence, correlation_weight) {
   # Blend predictor with random noise to achieve target correlation
   random_component <- runif(n)
   blended_predictor <- (1 - correlation_weight) * random_component + 
@@ -236,7 +242,7 @@ simulate_condition <- function(n, predictor, target_prevalence, correlation_weig
   outcomes
 }
 
-simulate_obesity <- function(n, income, education, state_pec, age, target_prevalence, correlation_weight = 0.15) {
+gen_obesity <- function(n, income, education, state_pec, age, target_prevalence, correlation_weight = 0.15) {
   # Define weights for inputs
   weights <- c(-0.3, -0.2, -0.3, 0.4)  # Income, Education, State PEC = less likely; Age = more likely
   
@@ -252,63 +258,63 @@ simulate_obesity <- function(n, income, education, state_pec, age, target_preval
     weights[4] * age_scaled
   
   # Use helper function to simulate condition
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_multiple_gestation <- function(n, age, obesity, target_prevalence, correlation_weight = 0.15) {
+gen_multiple_gestation <- function(n, age, obesity, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.4, 0.6)  # AGE = higher, OBE = higher
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(obesity)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_diabetes <- function(n, age, obesity, income, target_prevalence, correlation_weight = 0.15) {
+gen_diabetes <- function(n, age, obesity, income, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.4, 0.5, -0.2)  # AGE = higher, OBE = higher, INC = lower
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(obesity) + 
     weights[3] * normalize_to_0_1(income)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_heart_disease <- function(n, age, obesity, dm, target_prevalence, correlation_weight = 0.15) {
+gen_heart_disease <- function(n, age, obesity, dm, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.3, 0.3, 0.4)  # AGE = higher, OBE = higher, DM = higher (bigger weight)
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(obesity) + 
     weights[3] * normalize_to_0_1(dm)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_placenta_previa <- function(n, age, mg, target_prevalence, correlation_weight = 0.15) {
+gen_placenta_previa <- function(n, age, mg, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.3, 0.7)  # AGE = higher, MG = higher (bigger weight)
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(mg)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_hypertension <- function(n, age, obesity, target_prevalence, correlation_weight = 0.15) {
+gen_hypertension <- function(n, age, obesity, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.5, 0.5)  # AGE = higher, OBE = higher
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(obesity)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_gest_hypertension <- function(n, hypertension, mg, target_prevalence, correlation_weight = 0.15) {
+gen_gest_hypertension <- function(n, hypertension, mg, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.7, 0.3)  # HT = a lot higher, MG = higher
   predictor <- weights[1] * normalize_to_0_1(hypertension) + 
     weights[2] * normalize_to_0_1(mg)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_preeclampsia <- function(n, age, hypertension, gest_hypertension, mg, target_prevalence, correlation_weight = 0.15) {
+gen_preeclampsia <- function(n, age, hypertension, gest_hypertension, mg, target_prevalence, correlation_weight = 0.15) {
   weights <- c(0.2, 0.4, 0.3, 0.1)  # AGE = higher, HT = higher (bigger weight), GHT = higher (bigger weight), MG = higher
   predictor <- weights[1] * normalize_to_0_1(age) + 
     weights[2] * normalize_to_0_1(hypertension) + 
     weights[3] * normalize_to_0_1(gest_hypertension) + 
     weights[4] * normalize_to_0_1(mg)
-  simulate_condition(n, predictor, target_prevalence, correlation_weight)
+  gen_condition(n, predictor, target_prevalence, correlation_weight)
 }
 
-simulate_dependents <- function(n, income, job_type, age) {
+gen_dependents <- function(n, income, job_type, age) {
   job_type_dependents <- c(
     "unemployed" = 3,
     "unskilled" = 2.5,
@@ -334,7 +340,7 @@ simulate_dependents <- function(n, income, job_type, age) {
   dependents
 }
 
-simulate_insurance <- function(n, job_type_cats, job_type, state_pec, age) {
+gen_insurance <- function(n, job_type_cats, job_type, state_pec, age) {
   job_type_probs <- data.frame(
     job_type = job_type_cats,
     no_insurance = c(0.7, 0.5, 0.4, 0.1),
@@ -369,13 +375,13 @@ simulate_insurance <- function(n, job_type_cats, job_type, state_pec, age) {
   })
 }
 
-simulate_distance <- function(n, state_pec) {
+gen_distance <- function(n, state_pec) {
   distances <- rexp(n, rate = 1 / 10) * (1 - abs(state_pec) * 0.1)
   
   distances / median(distances) * 10
 }
 
-generate_income <- function(n, job_type, edu, race, pec, age) {
+gen_income <- function(n, job_type, edu, race, pec, age) {
   job_type_income <- c(
     "unemployed" = 10000,
     "unskilled" = 40000,
@@ -436,6 +442,163 @@ generate_income <- function(n, job_type, edu, race, pec, age) {
   return(round(income, 2))
 }
 
+gen_personal_capacity <- function(n, dependents, job_type, income, distance_to_provider, state_pec) {
+  
+  dependents_normalized <- normalize_to_0_1(dependents)
+  job_type_normalized <- normalize_to_0_1(as.numeric(as.factor(job_type)))
+  income_normalized <- normalize_to_0_1(income)
+  distance_normalized <- normalize_to_0_1(distance_to_provider)
+  
+  capacity <- 0.25 * (1 - dependents_normalized) +
+    0.25 * (1 - job_type_normalized) +
+    0.25 * income_normalized +
+    0.25 * (1 - distance_normalized)  # Distance is inversely related to capacity
+  
+  random_noise <- runif(n, -0.5, 0.5)  # Randomness between -0.5 and 0.5
+  capacity + random_noise
+}
+
+gen_risk_profile <- function(n, provider_quality, age, obesity, multiple_gestation, diabetes,
+                                  heart_disease, placenta_previa, preeclampsia, hypertension, gestational_hypertension) {
+  
+  age_normalized <- normalize_to_0_1(age)
+  obesity_normalized <- normalize_to_0_1(obesity)
+  multiple_gestation_normalized <- normalize_to_0_1(multiple_gestation)
+  diabetes_normalized <- normalize_to_0_1(diabetes)
+  heart_disease_normalized <- normalize_to_0_1(heart_disease)
+  placenta_previa_normalized <- normalize_to_0_1(placenta_previa)
+  preeclampsia_normalized <- normalize_to_0_1(preeclampsia)
+  hypertension_normalized <- normalize_to_0_1(hypertension)
+  gestational_hypertension_normalized <- normalize_to_0_1(gestational_hypertension)
+  provider_quality_normalized <- normalize_to_0_1(provider_quality)
+  
+  # Provider quality is negatively correlated
+  provider_quality_normalized <- 1 - provider_quality_normalized  # Inverse relationship
+  
+  disease_weight <- 0.4  # Diseases will count the most
+  other_factors_weight <- 0.1  # Other factors have smaller weight
+  
+  # Calculate the risk score
+  risk_score <- disease_weight * (
+    diabetes_normalized + heart_disease_normalized + placenta_previa_normalized + 
+      preeclampsia_normalized + hypertension_normalized + gestational_hypertension_normalized) +
+    other_factors_weight * (
+      age_normalized + obesity_normalized + multiple_gestation_normalized) +
+    (1 - provider_quality_normalized) * 0.2  
+  
+  random_noise <- rnorm(n, mean = 0, sd = 1)
+  final_risk_score <- risk_score + random_noise
+  
+  scale(final_risk_score)
+}
+
+gen_risk_aversion <- function(n, insurance, provider_quality, risk_profile) {
+  
+  insurance_yes_no <- ifelse(insurance == "no_inusrance", 0, 1)
+  insurance_normalized <- insurance_yes_no  # Higher insurance = less risk-averse
+  provider_quality_normalized <- normalize_to_0_1(provider_quality)  # Higher provider quality = less risk-averse
+  risk_profile_normalized <- normalize_to_0_1(risk_profile)  # Higher risk profile = more risk-averse
+  
+  # Risk aversion formula
+  # Positive correlation: insurance and risk profile (higher = more risk aversion)
+  # Negative correlation: provider quality (higher = less risk aversion)
+  
+  risk_aversion <- 0.3 * insurance_normalized +  # 30% from insurance (more insurance = less risk-averse)
+    0.3 * risk_profile_normalized +  # 30% from risk profile (higher risk = more risk-averse)
+    0.4 * (1 - provider_quality_normalized)  # 40% from provider quality (higher provider quality = less risk-averse)
+  
+  random_noise <- rnorm(n, mean = 0, sd = 0.5)
+  final_risk_aversion <- risk_aversion + random_noise
+  
+  scale(final_risk_aversion)
+}
+
+gen_provider_trust <- function(n, re_cats, race_ethnicity, provider_quality, cultural_orientation) {
+  
+  race_ethnicity_weights <- c("white" = 1, 
+                              "hispanic" = 0.75, 
+                              "black" = 0.5, 
+                              "asian" = 1, 
+                              "aian" = 0.5, 
+                              "nhpi" = 0.75, 
+                              "other" = 0.75) 
+  
+  race_ethnicity_normalized <-race_ethnicity_weights[race_ethnicity]
+  
+  provider_quality_normalized <- normalize_to_0_1(provider_quality)  # Higher provider quality = more trust
+  cultural_orientation_normalized <- normalize_to_0_1(cultural_orientation)  # More trust in institutions = more trust
+  
+  trust_score <- 0.3 * race_ethnicity_normalized +  
+    0.4 * provider_quality_normalized +  
+    0.3 * cultural_orientation_normalized
+  
+  random_noise <- runif(n, -0.1, 0.1)
+  final_trust_score <- trust_score + random_noise
+  
+  pmax(pmin(final_trust_score, 1), 0)
+}
+
+
+gen_received_comprehensive_postnatal_care <- function(n, personal_capacity, willingness_to_pay, provider_quality, 
+                                                      provider_trust, risk_aversion, risk_profile) {
+  
+  personal_capacity_normalized <- normalize_to_0_1(personal_capacity)  # More capacity = more likely to attend
+  willingness_to_pay_normalized <- normalize_to_0_1(willingness_to_pay)  # Higher willingness = more likely to attend
+  provider_quality_normalized <- normalize_to_0_1(provider_quality)  # Better provider = more likely to attend
+  provider_trust_normalized <- normalize_to_0_1(provider_trust)  # More trust = more likely to attend
+  risk_aversion_normalized <- normalize_to_0_1(risk_aversion)  # More risk-averse = more likely to attend
+  risk_profile_normalized <- normalize_to_0_1(risk_profile)  # Higher risk = more likely to attend
+  
+  # Calculate the weighted sum of factors, with equal weights (approx 16.67% each)
+  weighted_sum <- (1/6) * personal_capacity_normalized +
+    (1/6) * willingness_to_pay_normalized +
+    (1/6) * provider_quality_normalized +
+    (1/6) * provider_trust_normalized +
+    (1/6) * risk_aversion_normalized +
+    (1/6) * risk_profile_normalized
+  
+  # Add 25% randomness to the final score
+  random_noise <- runif(n, -0.25, 0.25)  # Random noise between -0.25 and 0.25
+  final_score <- weighted_sum + random_noise
+  
+  # Convert final score to binary outcome (1 = attend, 0 = not attend)
+  as.vector(ifelse(final_score > 0.6, 1, 0))  # If score > 0.6, attend; else, don't attend
+}
+
+gen_willingness_to_pay <- function(n, provider_quality, income, insurance, 
+                                        risk_aversion, cultural_orientation) {
+  
+  insurance_yes_no <- ifelse(insurance == "no_inusrance", 0, 1)
+  
+  provider_quality_normalized <- normalize_to_0_1(provider_quality)  # Higher provider quality = higher willingness to pay
+  income_normalized <- normalize_to_0_1(income)  # Higher income = higher willingness to pay
+  insurance_normalized <- insurance_yes_no  # Higher insurance = higher willingness to pay
+  risk_aversion_normalized <- normalize_to_0_1(risk_aversion)  # More risk-averse = higher willingness to pay
+  cultural_orientation_normalized <- normalize_to_0_1(cultural_orientation)  # Trust in institutions = higher willingness to pay
+  
+  provider_quality_weight <- 0.25
+  income_weight <- 0.2
+  insurance_weight <- 0.2
+  risk_aversion_weight <- 0.2
+  cultural_orientation_weight <- 0.15  # Assuming cultural orientation has slightly less weight
+  
+  willingness_to_pay <- provider_quality_weight * provider_quality_normalized +
+    income_weight * income_normalized +
+    insurance_weight * insurance_normalized +
+    risk_aversion_weight * risk_aversion_normalized +
+    cultural_orientation_weight * cultural_orientation_normalized
+  
+  random_noise <- rnorm(n, mean = 0, sd = 0.1)  # Small noise to introduce randomness
+  final_willingness_to_pay <- willingness_to_pay + random_noise
+  
+  scale(final_willingness_to_pay)
+}
+
+# Helper function to normalize to 0-1 range
+normalize_to_0_1 <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
 extract_formula_vars <- function(formula) {
   # Extract all terms (variables) from the formula
   terms <- all.vars(formula)
@@ -492,7 +655,7 @@ gen_dag_plot <- function(dag, labels, title, subtitle = NA, legend_width=12, leg
 }
 
 save_dag_plot <- function(dag, title, width, height) {
-  ggsave(paste0("images/", title, ".png"), dag, width = width, height = height, dpi = 300)
+  ggsave(paste0("images/dag/", title, ".png"), dag, width = width, height = height, dpi = 300)
 }
 
 

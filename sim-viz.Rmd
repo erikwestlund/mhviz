@@ -1,0 +1,434 @@
+---
+title: "Simulated Data Visualization"
+author: "Erik Westlund"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+library(broom)
+library(stringr)
+library(ggrepel)
+library(maps)
+library(usmap)
+library(sf)
+library(lme4)
+library(broom.mixed)
+
+source("colors.R")
+
+data <- readr::read_csv("data/simulated_data.csv")
+state_data <- readr::read_csv("data/state_data.csv")
+data <- data |>
+  mutate(
+    state = as.factor(state),
+    received_comprehensive_postnatal_care = as.numeric(received_comprehensive_postnatal_care),
+    insurance = fct_relevel(insurance, "no_insurance"),
+    race_ethnicity = fct_relevel(race_ethnicity, "white"),
+    edu = fct_relevel(edu, "hs"),
+    job_type = fct_relevel(job_type, "unemployed"),
+  )
+
+data$self_report_income <- factor(data$self_report_income, levels = c(
+  "0–$25,000",
+  "$25,000–$50,000",
+  "$50,000–$75,000",
+  "$75,000–$100,000",
+  "$100,000–$125,000",
+  "$125,000–$150,000",
+  "$150,000–$175,000",
+  "$175,000+"
+))
+
+# Set "$50,000–$75,000" as the reference category
+data$self_report_income <- fct_relevel(data$self_report_income, "$50,000–$75,000")
+
+data
+
+data |> head()
+
+race_ethnicity_labels <- c("American Indian or Alaska Native" = "aian",
+          "White" = "white",
+          "Black" = "black",
+          "Asian" = "asian",
+          "Hispanic" = "hispanic",
+          "Native Hawaiian or Pacific Islander" = "nhpi",
+          "Other" = "other")
+
+```
+
+## Basic Visualizations
+
+### Provider Trust
+
+From our causal model, we theorize three causes of provider trust:
+
+* Provider quality
+* Race/ethnicity
+* Cultural orientation (namely, trust in institutions)
+
+We observe race, but we do not observe provider quality or cultural orientation. 
+
+## Provider quality
+
+For provider quality, we hypothesize the political and economic conditions with respect to healthcare will influence provider quality. We do not observe provider quality directly, but we do observe what state the provider is in.
+
+Given all this, it may help us to see:
+
+* A breakdown of race/ethnicity
+* A breakdown of receipt of comprehensive care by race/ethnicity
+* A breakdown of receipt of comprehensive care by state
+* A breakdown of receipt of comprehensive care by race by state
+
+### Race/ethnicity
+
+For categorical variables, we typically first want to see a bar chart of the distribution of the variable.
+
+```{r race_ethnicity}
+
+# Bar chart
+ggplot(data, aes(race_ethnicity)) +
+  geom_bar() + 
+  theme_minimal()
+  
+ggsave("images/report/race_ethnicity_1.png", width = 6, height = 4, dpi=300)
+
+
+# Do using a summarize
+  ggplot(
+    data |>
+      count(race_ethnicity) |>
+      mutate(
+        proportion = n / sum(n),
+        race_ethnicity = fct_recode(
+          factor(race_ethnicity),
+          !!! race_ethnicity_labels
+        )
+      ) |>
+      arrange(desc(proportion)) |>
+      mutate(race_ethnicity = fct_inorder(race_ethnicity) |> fct_rev())
+    ,
+    aes(x = proportion, y = race_ethnicity)
+  ) +
+  geom_bar(stat = "identity",
+           fill = colors$blue$`400`,
+           color = "black") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 1)),
+            hjust = -0.2,
+            size = 4) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "", y = "", title = "Patients by Race/Ethnicity", caption = "Source: Simulated Data") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+ggsave("images/report/race_ethnicity_2.png",width = 12, height = 5.625, dpi = 300)
+
+# RCP vs. Race/Ethnicity
+plot_data <- data |>
+  group_by(race_ethnicity) |>
+  summarize(
+    proportion = mean(received_comprehensive_postnatal_care),
+    n = n()
+  ) |>
+  ungroup() |>
+  mutate(
+    race_ethnicity = fct_recode(factor(race_ethnicity), !!!race_ethnicity_labels),
+    race_ethnicity = fct_reorder(race_ethnicity, proportion)
+  )
+
+# Plot proportions by race
+ggplot(plot_data, aes(x = proportion, y = race_ethnicity)) +
+  geom_bar(stat = "identity", fill = colors$blue$`400`, color = "black") +
+  geom_text(
+    aes(label = scales::percent(proportion, accuracy = 1)),
+    hjust = -0.1,
+    size = 4
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    x = "",
+    y = "",
+    title = "Receipt of Comprehensive Postnatal Care by Race/Ethnicity",
+    caption = "Source: Simulated Data"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+ggsave("images/report/rcp_race_ethnicity_1.png",width = 12, height = 5.625, dpi = 300)
+
+```
+
+## Maps
+
+We will now map the receipt of comprehensive postnatal care by state.
+
+Please note that you must think hard about whether it makes sense to map the data you are mapping. For example, if you are mapping the number of people who have received comprehensive postnatal care, you must think about whether it makes sense to compare states with different populations. In our case, we know that every state is evenly represented and every person has the same probability of being in the sample. However, these assumptions rarely hold with true to life research designs. 
+
+```{r map}
+
+us_map <- us_map(regions = "states")
+
+rcp_by_state_data <- data |>
+  group_by(state) |>
+  summarize(
+    proportion = mean(received_comprehensive_postnatal_care),
+    n = n()
+  ) |>
+  ungroup()
+
+# Merge summarized data with map data
+rcp_by_state_data_mappable <- us_map |>
+  left_join(
+    rcp_by_state_data, 
+    by = c("abbr"="state")
+  )
+
+ggplot(data = rcp_by_state_data_mappable) +
+  geom_sf(aes(fill = proportion), color = "white") +
+  scale_fill_continuous(
+    low = colors$blue$`50`,
+    high = colors$blue$`900`,
+    name = "Proportion",
+    labels = scales::percent,
+  ) +
+  labs(
+    title = "Proportion Receiving Comprehensive Postnatal Care By State",
+    caption = "Source: Simulated Data"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+ggsave("images/report/rcp_by_state.png", width = 12, height = 5.625, dpi = 300)
+
+
+# Will it work? Maps  by state
+race_ethnicity_care_data <- data |>
+  group_by(state, race_ethnicity) |>
+  summarize(
+    proportion = mean(received_comprehensive_postnatal_care, na.rm = TRUE),
+    n = n(),
+    	.groups = "drop"
+  ) |>
+  ungroup() |>
+  mutate(
+    race_ethnicity = fct_recode(race_ethnicity, !!!race_ethnicity_labels)
+  )
+
+race_ethnicity_care_sf <- us_map |>
+  left_join(
+	race_ethnicity_care_data,
+	by = c("abbr" = "state")
+  )
+
+ggplot(race_ethnicity_care_sf) +
+  geom_sf(aes(geometry = geom, fill = proportion), color = "white", size = 0.1) +
+  scale_fill_continuous(
+    low = colors$blue$`100`,
+    high = colors$blue$`900`,
+    name = "Proportion",
+    labels = scales::percent,
+    na.value = "grey90"
+  ) +
+  facet_wrap(~ race_ethnicity, ncol = 4, nrow = 2) +
+  labs(
+    title = "Proportion Receiving Comprehensive Postnatal Care by Race",
+    fill = "Proportion",
+    caption = "Source: Simulated Data"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    strip.text = element_text(size = 12, face = "bold")
+  )
+
+ggsave("images/report/rcp_by_race_by_state.png", width = 12, height = 5.625, dpi = 300)
+
+```
+
+## Forest plots
+
+```{r forest}
+
+# Calculate overall proportions for all states
+overall_care_data <- data |>
+  group_by(state) |>
+  summarize(
+    proportion = mean(received_comprehensive_postnatal_care, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) |>
+  mutate(race_ethnicity = "Overall")
+
+# Calculate proportions for each race
+race_care_data <- data |>
+  filter(race_ethnicity %in% c("white", "black", "hispanic", "asian")) |>
+  group_by(state, race_ethnicity) |>
+  summarize(
+    proportion = mean(received_comprehensive_postnatal_care, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )  |>
+  mutate(
+    race_ethnicity = fct_recode(race_ethnicity, !!!race_ethnicity_labels)
+  ) ## will have warning because we dropped some race/eth cats
+
+
+# Combine overall and race-specific data
+forest_data <- bind_rows(overall_care_data, race_care_data)
+
+# Sort states by overall proportion (to ensure consistent order across facets)
+state_order <- forest_data |>
+  filter(race_ethnicity == "Overall") |>
+  arrange(proportion) |>
+  pull(state)
+
+forest_data <- forest_data |>
+  mutate(state = factor(state, levels = state_order)) |> 
+  mutate(
+    race_ethnicity = factor(
+      race_ethnicity,
+      levels = c("Overall", "White", "Black", "Hispanic", "Asian")
+    )
+  )
+
+ggplot(forest_data, aes(x = proportion, y = state)) +
+  geom_point(size = 3, color = colors$blue$`500`) +
+  geom_segment(
+    aes(x = 0, xend = proportion, y = state, yend = state),
+    color = colors$blue$`500`,
+    linetype = "dotted"
+  ) +
+  facet_wrap(~race_ethnicity, ncol = 5, scales = "free_y") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Proportion Receiving Comprehensive Postnatal Care",
+    x = "Proportion",
+    y = "State",
+    caption = "Source: Simulated Data"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    strip.text = element_text(size = 12, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    plot.caption = element_text(size = 10, hjust = 0)
+  )
+ggsave("images/report/race_ethnicity_forest_plot.png", width = 12, height = 5.625, dpi = 300)
+```
+
+## Visualizing Models
+
+```{r model}
+
+model <- glmer(
+  received_comprehensive_postnatal_care ~ 
+    race_ethnicity +
+    log(distance_to_provider) +
+    insurance +
+    multiple_gestation + 
+    placenta_previa + 
+    gest_hypertension + 
+    preeclampsia +
+    (1 | provider_id),  
+  data = data, 
+  family = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1e5))
+)
+
+summary(model)
+
+
+variable_labels <- c(
+  "race_ethnicityaian" = "AIAN",
+  "race_ethnicityasian" = "Asian",
+  "race_ethnicityblack" = "Black",
+  "race_ethnicityhispanic" = "Hispanic",
+  "race_ethnicitynhpi" = "NHPI",
+  "race_ethnicityother" = "Other",
+  "log(distance_to_provider)" = "Log(Distance to Provider)",
+  "insuranceprivate" = "Insurance: Private",
+  "insurancestate_provided" = "Insurance: State-Provided",
+  "multiple_gestation" = "Multiple Gestation",
+  "placenta_previa" = "Placenta Previa",
+  "gest_hypertension" = "Gestational Hypertension",
+  "preeclampsia" = "Preeclampsia",
+  "(Intercept)" = "Intercept"
+)
+
+# Forest plot of results
+marginal_effects <- broom.mixed::tidy(model, effects = "fixed", conf.int = TRUE) |> 
+  mutate(label = variable_labels[term]) |> 
+  filter(term != "(Intercept)")
+
+# Create a forest plot
+ggplot(marginal_effects, aes(x = estimate, y = reorder(label, estimate))) +
+  geom_point(color = colors$blue$`600`, size = 3) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = colors$blue$`600`) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = colors$red$`600`) +
+  labs(
+    x = "Change in Probability of Receiving Comprehensive Postnatal Care (95% CI)",
+    y = NULL,
+    title = "GLMM Marginal Effects",
+    caption = "Source: Marginal Effects Analysis"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    plot.caption = element_text(size = 10)
+  )
+
+ggsave("images/report/marginal_effects.png", width = 12, height = 5.625, dpi = 300)
+
+
+
+## Random effects
+random_effects <- ranef(model, condVar=TRUE)
+random_effects_data <- augment(rr)
+
+# Create the forest plot
+ggplot(random_effects_df, aes(x = estimate, y = factor(level, levels = level))) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub), height = 0.2, color = colors$slate$`300`) +  # Error bars
+  geom_point(size = 3, color = colors$blue$`500`) +  # Points for estimates (on top of error bars)
+  labs(
+    title = "Forest Plot of Random Effects",
+    x = "Estimate (95% CI)",
+    y = "Provider",
+    caption = "Random effects with confidence intervals"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),  # Remove horizontal grid lines
+    panel.grid.minor.y = element_blank(),  # Remove minor horizontal grid lines
+    axis.text.y = element_blank(),  # Remove y-axis tick labels
+    axis.ticks.y = element_blank(),  # Remove y-axis tick marks
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold")
+  )
+
+ggsave("images/report/random_effects.png", width = 12, height = 5.625, dpi = 300)
+```
