@@ -5,14 +5,14 @@
 The below files are included in this repository:
 
 ```
-- /data/: Directory containing data used in the project, including last generated simulated data.
-- /images/: Directory containing images used in the project
-- causal-model.Rmd: R Markdown file for generating the causal model DAGs
-- correlations-visualized.Rmd: R Markdown file for generating the correlation visualizations
-- data-simulations.Rmd: R Markdown file for generating the simulated data
-- design.Rmd: R Markdown file for generating the design illustrations
-- sim-viz.Rmd: R Markdown file for generating the visualizations of the simulated data
-
+project/
+├── data/                              # Data used in the project
+├── images/                            # Images used in the project
+├── causal-model.Rmd                   # Generates the causal model DAGs
+├── correlations-visualized.Rmd        # Generates the correlation visualizations
+├── data-simulations.Rmd               # Generates the simulated data
+├── design.Rmd                         # Generates the design illustrations
+└── sim-viz.Rmd                        # Generates visualizations of the simulated data
 ```
 
 These files are used to generate the visualizations and data used in the project. The data is simulated and should not be used for external analyses.
