@@ -337,7 +337,7 @@ ggplot(forest_data, aes(x = proportion, y = state)) +
     plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
     plot.caption = element_text(size = 10, hjust = 0)
   )
-ggsave("images/report/race_ethnicity_forest_plot.png", width = 12, height = 5.625, dpi = 300)
+ggsave("images/report/race_ethnicity_forest_plot.png", width = 12, height = 8, dpi = 300)
 ```
 
 ## Visualizing Models

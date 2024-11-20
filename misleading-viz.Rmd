@@ -1,0 +1,175 @@
+---
+title: "Misleading Visualization"
+author: "Erik Westlund"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(dplyr)
+
+source("colors.R")
+
+set.seed(123)
+```
+
+## Naughty Axes
+
+```{r naughty_axes}
+n <- 500000
+
+data <- data.frame(
+  exposure = rbinom(n, 1, 0.5),
+  confounder = rbinom(n, 1, 0.5)
+)
+
+base_prob <- 0.000001 # 0.0001% of population
+
+data$bad_outcome <- rbinom(
+  n, 1, base_prob * (1 + 3 * data$exposure + 2 * data$confounder)
+)
+
+model <- glm(bad_outcome ~ exposure, data = data, family = "binomial")
+summary(model)
+
+
+summary_data <- data |>
+  group_by(exposure) |>
+  summarize(
+    risk = mean(bad_outcome),
+    n = n(),
+    .groups = "drop"
+  )
+
+# Plot with constrained axes
+ggplot(summary_data, aes(x = factor(exposure), y = risk, fill = factor(exposure))) +
+  geom_col() +
+  labs(
+    title = "Risk of Bad Outcome by Exposure",
+    x = "Exposure",
+    y = "Proportion with Bad Outcome",
+    fill = "Exposure"
+  ) +
+  scale_y_continuous(limits = c(0, max(summary_data$risk) * 1.5)) +
+  theme_minimal()
+
+ggsave("images/misleading/axes.png", width = 6, height = 4, dpi=300)
+
+# Now add confounder
+stratified_data <- data |>
+  group_by(confounder, exposure) |>
+  summarize(
+    risk = mean(bad_outcome),
+    n = n(),
+    .groups = "drop"
+  )
+
+# With annotations and confoudner
+ggplot(stratified_data, aes(x = factor(exposure), y = risk, fill = factor(exposure))) +
+  geom_col() +
+  geom_text(
+    aes(label = paste0("p = ", sprintf("%.6f", risk))), 
+    vjust = -0.5, 
+    size = 3      
+  ) +
+  facet_wrap(~ confounder, nrow = 1, labeller = labeller(confounder = c(`0` = "Confounder: No", `1` = "Confounder: Yes"))) +
+  labs(
+    title = "Risk of Bad Outcome by Exposure and Confounder",
+    x = "Exposure",
+    y = "Probability of Bad Outcome",
+    fill = "Exposure"
+  ) +
+  scale_y_continuous(limits = c(0, max(stratified_data$risk) * 1.5)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12)
+  )
+
+ggsave("images/misleading/axes_facet.png", width = 6, height = 4, dpi=300)
+
+
+# Plot with annotations
+ggplot(stratified_data, aes(x = factor(exposure), y = risk, fill = factor(exposure))) +
+  geom_col() +
+  geom_text(
+    aes(label = paste0("p = ", sprintf("%.6f", risk))), 
+    vjust = -0.5,
+    size = 3
+  ) +
+  facet_wrap(~ confounder, nrow = 1, labeller = labeller(confounder = c(`0` = "Confounder: No", `1` = "Confounder: Yes"))) +
+  labs(
+    title = "Risk of Bad Outcome by Exposure and Confounder",
+    x = "Exposure",
+    y = "Probability of Bad Outcome",
+    fill = "Exposure"
+  ) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12)
+  )
+
+ggsave("images/misleading/axes_facet_annotated.png", width = 6, height = 4, dpi=300)
+```
+
+## Naughty Time Series Axes
+
+```{r naughty_time_series}
+
+years <- 1:30
+
+base_value <- 100000
+
+growth_20_years <- base_value * (1.03 ^ (0:19)) + rnorm(20, mean = 0, sd = 2000)
+growth_2_years <- growth_20_years[20] * (1.20 ^ (1:2)) + rnorm(2, mean = 0, sd = 5000)
+plateau_6_years <- rep(growth_2_years[2], 6) + rnorm(6, mean = 0, sd = 3000)
+decline_2_years <- seq(plateau_6_years[6], growth_20_years[20], length.out = 2) + rnorm(2, mean = 0, sd = 3000)
+
+home_values <- c(growth_20_years, growth_2_years, plateau_6_years, decline_2_years)
+
+home_value_data <- data.frame(
+  Year = years,
+  HomeValue = home_values
+)
+
+# Full range plot
+ggplot(home_value_data, aes(x = Year, y = HomeValue)) +
+  geom_line(color = colors$blue$`600`) +
+  geom_point(color = colors$blue$`400`) +
+  geom_text(
+    data = home_value_data[home_value_data$Year %% 3 == 0, ],
+    aes(label = paste0("$", format(round(HomeValue, 0), big.mark = ","))),
+    nudge_y = 10000,
+    size = 3
+  ) +
+  labs(
+    title = "My Home Value Over 30 Years",
+    x = "Year",
+    y = "My Home Value"
+  ) +
+  theme_minimal()
+
+# Zoomed-in plot (from year 20 onwards)
+ggplot(home_value_data[home_value_data$Year >= 20, ], aes(x = Year, y = HomeValue)) +
+  geom_line(color = colors$blue$`600`) +
+  geom_point(color = colors$red$`400`) +
+  geom_text(
+    data = home_value_data[home_value_data$Year >= 20 & home_value_data$Year %% 3 == 0, ],
+    aes(label = paste0("$", format(round(HomeValue, 0), big.mark = ","))),
+    nudge_y = 10000,
+    size = 3
+  ) +
+  labs(
+    title = "My Home Value Over The Last Fifteen Years",
+    x = "Year",
+    y = "Home Value"
+  ) +
+  theme_minimal()
+
+```
+
