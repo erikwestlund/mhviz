@@ -7,7 +7,7 @@ Files used for the November 21, 2024 presentation to the Maternal Health Working
 The below files are included in this repository:
 
 ```
-/mh-viz
+mhviz/
 ├── data/                              # Data used in the project
 ├── images/                            # Images used in the project
 ├── causal-model.Rmd                   # Generates the causal model DAGs
