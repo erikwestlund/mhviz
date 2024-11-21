@@ -69,10 +69,10 @@ ggplot(auto, aes(x = manufacturer, y = mpg)) +
 ggsave("images/gg/geom_point.png", width = 8, height = 6, dpi = 300)
 
 # Position/Fill
-japanese_data <- auto |>
-  filter(manufacturer %in% c("Toyota", "Honda", "Nissan"))
+american_data <- source_auto |>
+  filter(manufacturer %in% c("Ford", "Chev.", "Olds"))
 
-ggplot(japanese_data, aes(x = manufacturer, fill = weight_cat)) +
+ggplot(american_data, aes(x = manufacturer, fill = weight_cat)) +
   geom_bar() +
   theme_minimal()
 ggsave("images/gg/geom_bar_f.png", width = 12, height = 6, dpi = 300)
@@ -150,7 +150,7 @@ That's a good start, but there are issues.  For one, the text colors look bad. C
 
 **I told it to fix a few errors and then told it:**
 
-A few issues. There are not a lot of large cars.  Lets start over.  By the way, I stored the source auto_data as "source_auto" so you can always start any data manipulations with source_data.  
+A few issues. There are not a lot of large cars.  Lets start over.  By the way, I stored the source auto_data as "source_auto" so you can always start any data manipulations with source_auto.  
 
 Let's keep this idea but fix the following things.  Lets do "compact cars" and "large cars". So only two facets.
 
