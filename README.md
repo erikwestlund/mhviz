@@ -26,7 +26,17 @@ These files are used to generate the visualizations and data used in the project
 
 State population data came from the 2020 US Census. They are modified by hand for our purposes and should not be used for external analyses.
 
-## Packages Used
+## Software Used
+
+### Statistical Software
+
+* [R](https://www.r-project.org/)
+* [RStudio](https://www.rstudio.com/)
+* [Tidyverse](https://www.tidyverse.org/)
+
+All examples are made in R using `tidyverse` tools. You can render the `.Rmd` files in RStudio.
+
+### Packages
 
 The following R packages are used in this project. Copy below to install them.
 
