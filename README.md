@@ -62,4 +62,4 @@ install.packages(c(
 ## References
 
 * Massive credit goes to [Kieran Healy](https://kieranhealy.org/) for his [Data Visualization: A Practical Introduction](https://socviz.co/) book. The code in this repository is heavily influenced by his work.
-* The data correlation pattern code is adapted from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/)
+* The data correlation pattern code is adapted from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/).
