@@ -19,7 +19,7 @@ set.seed(123)
 
 ## What lies behind a correlation coefficient?
 
-This is adapted direclty from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/)
+This is adapted directly from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/)
 
 ```{r plot_r, echo=FALSE}
 
