@@ -57,11 +57,11 @@ corr_r <- function(r = 0.6, n = 50) {
   compute.y <- function(x, y, r) {
     theta <- acos(r)
     X <- cbind(x, y)
-    Xctr <- scale(X, center = TRUE, scale = FALSE)
-    Id <- diag(n)
-    Q <- qr.Q(qr(Xctr[, 1, drop = FALSE]))
-    P <- tcrossprod(Q)
-    x2o <- (Id - P) %*% Xctr[, 2]
+    Xctr <- scale(X, center = TRUE, scale = FALSE)    # Centered variables (mean 0)
+    Id <- diag(n)                                     # Identity matrix
+    Q <- qr.Q(qr(Xctr[, 1, drop = FALSE]))            # QR decomposition
+    P <- tcrossprod(Q)                                # Projection onto space defined by x1
+    x2o <- (Id - P) %*% Xctr[, 2]                     # x2ctr made orthogonal to x1ctr
     Xc2 <- cbind(Xctr[, 1], x2o)
     Y <- Xc2 %*% diag(1 / sqrt(colSums(Xc2 ^ 2)))
     y <- Y[, 2] + (1 / tan(theta)) * Y[, 1]
@@ -97,7 +97,6 @@ corr_r <- function(r = 0.6, n = 50) {
          y = sample(1:7, n, replace = TRUE))
   )
   
-  # Compute y for all cases
   df <- bind_rows(lapply(cases, function(case) {
     id = case$id
     x <- case$x
@@ -105,7 +104,6 @@ corr_r <- function(r = 0.6, n = 50) {
     data.frame(id = id, x = x, y = y, title = case$title)
   }))
   
-  # Set factor levels to preserve order
   df$title <- factor(df$title, levels = paste0("(", 1:16, ") ", c(
     "Normal x, normal residuals",
     "Uniform x, normal residuals",

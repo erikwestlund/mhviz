@@ -26,6 +26,40 @@ These files are used to generate the visualizations and data used in the project
 
 State population data came from the 2020 US Census. They are modified by hand for our purposes and should not be used for external analyses.
 
+## Packages Used
+
+The following R packages are used in this project. Copy below to install them.
+
+```r
+
+install.packages(c(
+  "broom",
+  "broom.mixed",
+  "causaldata",
+  "cowplot",
+  "dagitty",
+  "dplyr",
+  "forcats",
+  "ggdag",
+  "ggplot2",
+  "ggrepel",
+  "ggtext",
+  "janitor",
+  "kableExtra",
+  "lme4",
+  "maps",
+  "purrr",
+  "readr",
+  "sf",
+  "showtext",
+  "stringr",
+  "tidyr",
+  "usmap"
+))
+
+```
+
 ## References
 
-Massive credit goes to [Kieran Healy](https://kieranhealy.org/) for his [Data Visualization: A Practical Introduction](https://socviz.co/) book. The code in this repository is heavily influenced by his work.
+* Massive credit goes to [Kieran Healy](https://kieranhealy.org/) for his [Data Visualization: A Practical Introduction](https://socviz.co/) book. The code in this repository is heavily influenced by his work.
+* The data correlation pattern code is adapted from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/)

@@ -309,15 +309,16 @@ save_dag_plot(combined_plot, "full_dag_plot", width=20, height=10)
 Exogenous variables:
 
 ```{r diagnostics}
+
 exogenous_vars <- exogenousVariables(full_dag$dag)
 
 exogenous_vars |> cat(sep="\n")
+
 ```
 
 Is the DAG acyclic?
 
 ```{r dag_a_dag}
-
 
 isAcyclic(full_dag$dag) |> cat("\n")
 findCycle(full_dag$dag) |> cat("\n")

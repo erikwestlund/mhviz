@@ -22,7 +22,6 @@ n_providers = round(50000/100)
 
 source("utils.R")
 
-# define factor catgegories
 re_cats <- c("white", "hispanic", "black", "asian", "aian", "nhpi", "other")
 ed_cats <- c("less_than_hs", "hs", "some_college", "college", "post_grad")
 rel_cats <- c("christian", "muslim", "jewish", "buddhist", "hindu", "other")
@@ -49,7 +48,7 @@ state_population_data <- read.csv("data/states_census2020_ranks.csv") |>
   mutate(state_weight = population/sum(population)) |> 
    mutate(
     inverted_rank = max(rank) + 1 - rank,  # Invert ranks (lower is better)
-    pec = scale(inverted_rank, center = TRUE, scale = TRUE)[, 1]  # Z-score (normal distribution)
+    pec = scale(inverted_rank, center = TRUE, scale = TRUE)[, 1]  # Z-score
   ) |> 
   select(-inverted_rank) 
 
