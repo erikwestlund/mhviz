@@ -1,6 +1,10 @@
 # Data Viz
 
-Files used for the November 21, 2024 presentation to the Maternal Health Working Group at Johns Hopkins University.
+Files used for the November 21, 2024 presentation to the [Data Innovation and Coordinating Hub](https://maternalhealthhub.jhu.edu/johns-hopkins-university#:~:text=The%20Hub%20is%20a%20multidisciplinary,Medicine%20at%20Johns%20Hopkins%20University) for the [https://www.nih.gov/news-events/news-releases/nih-establishes-maternal-health-research-centers-excellence](NIH Maternal Health Research Centers of Excellence).
+
+## Talk Recording
+
+A recording of this presentation was published on YouTube. [Watch Here](https://www.youtube.com/watch?v=Flt7Cqbeyyw).
 
 ## Contents
 
@@ -30,9 +34,9 @@ State population data came from the 2020 US Census. They are modified by hand fo
 
 ### Statistical Software
 
-* [R](https://www.r-project.org/)
-* [RStudio](https://www.rstudio.com/)
-* [Tidyverse](https://www.tidyverse.org/)
+- [R](https://www.r-project.org/)
+- [RStudio](https://www.rstudio.com/)
+- [Tidyverse](https://www.tidyverse.org/)
 
 All examples are made in R using `tidyverse` tools. You can render the `.Rmd` files in RStudio.
 
@@ -71,5 +75,5 @@ install.packages(c(
 
 ## References
 
-* Massive credit goes to [Kieran Healy](https://kieranhealy.org/) for his [Data Visualization: A Practical Introduction](https://socviz.co/) book. The code in this repository is heavily influenced by his work.
-* The data correlation pattern code is adapted from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/).
+- Massive credit goes to [Kieran Healy](https://kieranhealy.org/) for his [Data Visualization: A Practical Introduction](https://socviz.co/) book. The code in this repository is heavily influenced by his work.
+- The data correlation pattern code is adapted from [Jan Vanhove](https://janhove.github.io/posts/2016-11-21-what-correlations-look-like/).
