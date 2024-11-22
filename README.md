@@ -1,6 +1,6 @@
 # Data Viz
 
-Files used for the November 21, 2024 presentation the the [Johns Hopkins Maternal Health Data Innovation and Coordinating Hub](https://maternalhealthhub.jhu.edu/johns-hopkins-university#:~:text=The%20Hub%20is%20a%20multidisciplinary,Medicine%20at%20Johns%20Hopkins%20University) of the [https://www.nih.gov/news-events/news-releases/nih-establishes-maternal-health-research-centers-excellence](NIH Maternal Health Research Centers of Excellence).
+Files used for the November 21, 2024 presentation the the [Johns Hopkins Maternal Health Data Innovation and Coordinating Hub](https://maternalhealthhub.jhu.edu/johns-hopkins-university#:~:text=The%20Hub%20is%20a%20multidisciplinary,Medicine%20at%20Johns%20Hopkins%20University) of the [NIH Maternal Health Research Centers of Excellence](https://www.nih.gov/news-events/news-releases/nih-establishes-maternal-health-research-centers-excellence).
 
 ## Talk Recording
 
